@@ -1,0 +1,5 @@
+{
+  "name": "VHDX Manager for Windows 11",
+  "description": "A web-based GUI to generate PowerShell commands for managing VHDX files on Windows 11. This application simulates a native utility by providing an interface to create, mount, modify, and manage virtual hard disks, generating the necessary commands for you to run in a PowerShell terminal.",
+  "requestFramePermissions": []
+}

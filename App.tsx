@@ -1,0 +1,212 @@
+import React, { useState, useRef } from 'react';
+import { CommandOutput } from './components/CommandOutput';
+import { ActionButton } from './components/ActionButton';
+import { FileSelector } from './components/FileSelector';
+import { Disclaimer } from './components/Disclaimer';
+import { ActionCard } from './components/ActionCard';
+
+const App: React.FC = () => {
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [generatedCommand, setGeneratedCommand] = useState<string>('// PowerShell 指令將會顯示在此處');
+    const [directoryPath, setDirectoryPath] = useState<string>('C:\\VHDs');
+    const [newFilename, setNewFilename] = useState<string>('new-disk.vhdx');
+    const [size, setSize] = useState<string>('10GB');
+    const [newSize, setNewSize] = useState<string>('20GB');
+    const [mountPoint, setMountPoint] = useState<string>('X:');
+    const [password, setPassword] = useState<string>('');
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleFileSelect = (file: File) => {
+        setSelectedFile(file);
+        setGeneratedCommand(`// 已選擇檔案: "${file.name}"`);
+    };
+    
+    const handleReset = () => {
+        setSelectedFile(null);
+        setDirectoryPath('C:\\VHDs');
+        setNewFilename('new-disk.vhdx');
+        setSize('10GB');
+        setNewSize('20GB');
+        setMountPoint('X:');
+        setPassword('');
+        setGeneratedCommand('// PowerShell 指令將會顯示在此處');
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+        }
+    };
+
+    const getPath = (forNewFile: boolean = false): string => {
+        const filename = forNewFile ? newFilename : selectedFile?.name;
+        if (!filename || !directoryPath) return '""';
+        const cleanDir = directoryPath.endsWith('\\') ? directoryPath.slice(0, -1) : directoryPath;
+        return `"${cleanDir}\\${filename}"`;
+    };
+
+    const commandActions = {
+        create: () => setGeneratedCommand(`New-VHD -Path ${getPath(true)} -SizeBytes ${size} -Dynamic`),
+        mount: () => setGeneratedCommand(`Mount-VHD -Path ${getPath()}`),
+        dismount: () => setGeneratedCommand(`Dismount-VHD -Path ${getPath()}`),
+        setReadOnly: () => setGeneratedCommand(`Set-VHD -Path ${getPath()} -ReadOnly`),
+        setReadWrite: () => setGeneratedCommand(`Set-VHD -Path ${getPath()} -ReadWrite`),
+        expand: () => setGeneratedCommand(`Resize-VHD -Path ${getPath()} -SizeBytes ${newSize}`),
+        optimize: () => setGeneratedCommand(`Optimize-VHD -Path ${getPath()} -Mode Full`),
+        shrink: () => setGeneratedCommand(`Resize-VHD -Path ${getPath()} -ToMinimumSize`),
+        encrypt: () => {
+            if (!password) {
+                setGeneratedCommand('// 請輸入密碼以啟用 BitLocker');
+                return;
+            }
+            setGeneratedCommand(`Enable-BitLocker -MountPoint ${mountPoint} -Password "${password}"`);
+        },
+        decrypt: () => setGeneratedCommand(`Disable-BitLocker -MountPoint ${mountPoint}`),
+    };
+
+    return (
+        <div className="min-h-screen bg-slate-900/80 backdrop-blur-xl text-slate-200 p-4 sm:p-6 lg:p-8">
+            <div className="max-w-7xl mx-auto">
+                <header className="flex justify-between items-center mb-8">
+                    <div>
+                        <h1 className="text-3xl font-bold text-white">VHDX Manager for Windows 11</h1>
+                        <p className="text-slate-400 mt-1">一個用於生成 VHDX 檔案管理 PowerShell 指令的圖形介面工具。</p>
+                    </div>
+                    <ActionButton onClick={handleReset} icon={ResetIcon} variant="secondary">重設</ActionButton>
+                </header>
+
+                <Disclaimer />
+
+                <main className="space-y-6">
+                    <ActionCard title="1. 設定 VHDX 目錄路徑">
+                        <div>
+                            <label htmlFor="dirPath" className="block text-sm font-medium text-slate-300 mb-2">VHDX 目錄路徑</label>
+                            <input
+                                id="dirPath"
+                                type="text"
+                                value={directoryPath}
+                                onChange={(e) => setDirectoryPath(e.target.value)}
+                                className="bg-slate-900 border border-slate-700 rounded-md px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-accent"
+                                placeholder="例如: D:\VirtualDisks"
+                            />
+                            <p className="text-xs text-slate-500 mt-2">請提供 VHDX 檔案的真實目錄路徑。所有指令將會使用此路徑。</p>
+                        </div>
+                    </ActionCard>
+
+                    <ActionCard title="2. 建立新 VHDX 檔案">
+                        <div className="flex flex-wrap items-end gap-4">
+                            <div className="flex-grow min-w-[200px]">
+                                <label htmlFor="newFilename" className="block text-xs text-slate-400 mb-1">新檔案名稱</label>
+                                <input
+                                    id="newFilename"
+                                    type="text"
+                                    value={newFilename}
+                                    onChange={(e) => setNewFilename(e.target.value)}
+                                    className="bg-slate-900 border border-slate-700 rounded-md px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-accent"
+                                />
+                            </div>
+                            <div className="w-full sm:w-32">
+                                <label htmlFor="size" className="block text-xs text-slate-400 mb-1">容量</label>
+                                <input
+                                    id="size"
+                                    type="text"
+                                    value={size}
+                                    onChange={(e) => setSize(e.target.value)}
+                                    className="bg-slate-900 border border-slate-700 rounded-md px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-accent"
+                                    placeholder="例如: 50GB"
+                                />
+                            </div>
+                            <ActionButton onClick={commandActions.create} icon={PlusIcon}>建立 VHDX</ActionButton>
+                        </div>
+                    </ActionCard>
+
+                    <ActionCard title="3. 操作現有檔案">
+                        <FileSelector ref={fileInputRef} onFileSelect={handleFileSelect} selectedFile={selectedFile} />
+                        
+                        <div className={`mt-6 pt-6 border-t border-slate-700 space-y-6 transition-opacity duration-300 ${!selectedFile ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}>
+                            <div>
+                                <h3 className="text-md font-semibold text-white mb-3">一般操作</h3>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                    <ActionButton onClick={commandActions.mount} icon={MountIcon}>掛載</ActionButton>
+                                    <ActionButton onClick={commandActions.dismount} icon={DismountIcon}>卸載</ActionButton>
+                                    <ActionButton onClick={commandActions.setReadOnly} icon={ReadOnlyIcon}>設為唯讀</ActionButton>
+                                    <ActionButton onClick={commandActions.setReadWrite} icon={ReadWriteIcon}>取消唯讀</ActionButton>
+                                </div>
+                            </div>
+
+                            <div>
+                                <h3 className="text-md font-semibold text-white mb-3">容量管理</h3>
+                                <div className="flex flex-wrap items-end gap-4">
+                                    <div className="flex items-end gap-2 flex-grow sm:flex-grow-0">
+                                        <div>
+                                            <label htmlFor="newSize" className="block text-xs text-slate-400 mb-1">新容量</label>
+                                            <input
+                                                id="newSize"
+                                                type="text"
+                                                value={newSize}
+                                                onChange={(e) => setNewSize(e.target.value)}
+                                                className="bg-slate-900 border border-slate-700 rounded-md px-3 py-2 text-sm w-32 focus:outline-none focus:ring-2 focus:ring-accent"
+                                                placeholder="例如: 100GB"
+                                            />
+                                        </div>
+                                        <ActionButton onClick={commandActions.expand} icon={ExpandIcon}>擴展容量</ActionButton>
+                                    </div>
+                                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4 min-w-[200px]">
+                                        <ActionButton onClick={commandActions.optimize} icon={OptimizeIcon}>優化空間</ActionButton>
+                                        <ActionButton onClick={commandActions.shrink} icon={ShrinkIcon}>縮小容量</ActionButton>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <h3 className="text-md font-semibold text-white mb-3">BitLocker 加密</h3>
+                                <div className="flex flex-wrap items-end gap-4">
+                                    <div className="flex flex-wrap gap-4">
+                                        <div>
+                                            <label htmlFor="mountPoint" className="block text-xs text-slate-400 mb-1">掛載點</label>
+                                            <input
+                                                id="mountPoint"
+                                                type="text"
+                                                value={mountPoint}
+                                                onChange={(e) => setMountPoint(e.target.value)}
+                                                className="bg-slate-900 border border-slate-700 rounded-md px-3 py-2 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-accent"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label htmlFor="password" className="block text-xs text-slate-400 mb-1">密碼</label>
+                                            <input
+                                                id="password"
+                                                type="password"
+                                                value={password}
+                                                onChange={(e) => setPassword(e.target.value)}
+                                                className="bg-slate-900 border border-slate-700 rounded-md px-3 py-2 text-sm w-36 focus:outline-none focus:ring-2 focus:ring-accent"
+                                                placeholder="輸入密碼"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4 min-w-[200px]">
+                                        <ActionButton onClick={commandActions.encrypt} icon={EncryptIcon}>加密</ActionButton>
+                                        <ActionButton onClick={commandActions.decrypt} icon={DecryptIcon} variant="secondary">移除密碼</ActionButton>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </ActionCard>
+
+                    <CommandOutput command={generatedCommand} />
+                </main>
+            </div>
+        </div>
+    );
+};
+
+const PlusIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" /></svg>;
+const MountIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M11 3a1 1 0 10-2 0v1.586l-2.293-2.293a1 1 0 00-1.414 1.414L8.586 7H3a1 1 0 000 2h5.586l-3.293 3.293a1 1 0 101.414 1.414L10 10.414V12a1 1 0 102 0v-1.586l3.293 3.293a1 1 0 001.414-1.414L11.414 9H17a1 1 0 100-2h-5.586l3.293-3.293a1 1 0 00-1.414-1.414L11 4.586V3z" /></svg>;
+const DismountIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 000 2h6a1 1 0 100-2H7z" clipRule="evenodd" /></svg>;
+const ReadOnlyIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z" clipRule="evenodd" /></svg>;
+const ReadWriteIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2V7a5 5 0 00-5-5zm0 2a3 3 0 013 3v2H7V7a3 3 0 013-3z" /></svg>;
+const OptimizeIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0L8.21 5.15a1.5 1.5 0 01-1.07.68l-2.1.3a2.5 2.5 0 00-1.7 4.27l1.52 1.63a1.5 1.5 0 01-.42 2.13l-1.88 1.15a2.5 2.5 0 00.99 4.5l2.03-.5a1.5 1.5 0 011.4.15l1.83 1.12a2.5 2.5 0 002.92 0l1.83-1.12a1.5 1.5 0 011.4-.15l2.03.5a2.5 2.5 0 00.99-4.5l-1.88-1.15a1.5 1.5 0 01-.42-2.13l1.52-1.63a2.5 2.5 0 00-1.7-4.27l-2.1-.3a1.5 1.5 0 01-1.07-.68L11.49 3.17z" clipRule="evenodd" /></svg>;
+const ShrinkIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M7.707 3.293a1 1 0 010 1.414L5.414 7H9a1 1 0 110 2H5.414l2.293 2.293a1 1 0 11-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0zM12.293 16.707a1 1 0 010-1.414L14.586 13H11a1 1 0 110-2h3.586l-2.293-2.293a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" /></svg>;
+const ExpandIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.707-10.293a1 1 0 00-1.414-1.414l-3 3a1 1 0 000 1.414l3 3a1 1 0 001.414-1.414L9.414 11H13a1 1 0 100-2H9.414l1.293-1.293z" clipRule="evenodd" transform="rotate(135 10 10)" /></svg>;
+const EncryptIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 2a1 1 0 011 1v1.333A4.002 4.002 0 0115 8.5v3.5a1.5 1.5 0 01-3 0V9a1 1 0 00-2 0v3a1.5 1.5 0 01-3 0V8.5A4.002 4.002 0 019 4.333V3a1 1 0 011-1zm5 8.5a.5.5 0 01.5.5v3a.5.5 0 01-.5.5h-10a.5.5 0 01-.5-.5v-3a.5.5 0 01.5-.5H15z" clipRule="evenodd" /></svg>;
+const DecryptIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 2a1 1 0 011 1v1.333A4.002 4.002 0 0115 8.5V9h-2v-.5a2 2 0 10-4 0v.5H5V8.5A4.002 4.002 0 019 4.333V3a1 1 0 011-1zm5 8.5a.5.5 0 01.5.5v3a.5.5 0 01-.5.5h-10a.5.5 0 01-.5-.5v-3a.5.5 0 01.5-.5H15z" clipRule="evenodd" /></svg>;
+const ResetIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 110 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm10 15a1 1 0 01-1-1v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 111.885-.666A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 01-1 1z" clipRule="evenodd" /></svg>;
+
+export default App;
